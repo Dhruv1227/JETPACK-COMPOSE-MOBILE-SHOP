@@ -1,0 +1,10 @@
+.gradle/
+.kotlin/
+.idea/
+.clj-kondo/
+.lsp/
+build/
+app/build/
+local.properties
+MobileShop_Submission.zip
+.DS_Store
