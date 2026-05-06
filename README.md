@@ -96,8 +96,6 @@ MobileShop/
 |-- gradlew
 |-- gradlew.bat
 |-- README.md
-|-- README.html
-|-- README.pdf
 `-- settings.gradle.kts
 ```
 
