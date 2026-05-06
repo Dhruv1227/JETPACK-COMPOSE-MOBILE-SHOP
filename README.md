@@ -4,6 +4,8 @@ Mobile Shop is a small Android shopping demo I built with Kotlin and Jetpack Com
 
 The payment part is only a simulation. The app does not ask for real card numbers, passwords, tokens, or personal payment details.
 
+GitHub repo: [JETPACK-COMPOSE-MOBILE-SHOP](https://github.com/Dhruv1227/JETPACK-COMPOSE-MOBILE-SHOP)
+
 ## Preview
 
 | Product Catalog | Cart | Simulated Payment |
