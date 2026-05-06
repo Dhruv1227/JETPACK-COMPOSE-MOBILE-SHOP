@@ -23,12 +23,25 @@ GitHub repo: [JETPACK-COMPOSE-MOBILE-SHOP](https://github.com/Dhruv1227/JETPACK-
 - Includes a demo checkout flow with `Demo Wallet` and `Demo Card`.
 - Clears the cart after the simulated payment is completed.
 
+## Product Details
+
+These are the products currently included in the sample catalog:
+
+| Product | Category | Price | Details |
+| --- | --- | ---: | --- |
+| Studio Headphones | Tech | $79.99 | Wireless sound with soft ear cushions. |
+| Everyday Backpack | Travel | $64.50 | Water-resistant bag with laptop space. |
+| Runner Sneakers | Style | $92.50 | Lightweight sneakers for busy days. |
+| Smart Watch | Tech | $129.99 | Tracks steps, sleep, and notifications. |
+| Desk Lamp | Home | $38.50 | Warm adjustable light for study time. |
+| Canvas Notebook | Study | $18.99 | Hardcover dotted pages with ribbon marker. |
+
 ## Tech Used
 
 - Kotlin
 - Jetpack Compose
 - Material 3
-- Gradle Kotlin DSL 
+- Gradle Kotlin DSL
 - JUnit tests
 
 ## Running The Project
