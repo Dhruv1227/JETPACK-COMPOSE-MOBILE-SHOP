@@ -26,7 +26,7 @@ The payment part is only a simulation. The app does not ask for real card number
 - Kotlin
 - Jetpack Compose
 - Material 3
-- Gradle Kotlin DSL
+- Gradle Kotlin DSL 
 - JUnit tests
 
 ## Running The Project
