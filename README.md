@@ -8,19 +8,24 @@ GitHub repo: [JETPACK-COMPOSE-MOBILE-SHOP](https://github.com/Dhruv1227/JETPACK-
 
 ## Preview
 
-| Product Catalog | Cart | Simulated Payment |
-| --- | --- | --- |
-| <img src="docs/screenshots/catalog.png" alt="Product catalog screen" width="240"> | <img src="docs/screenshots/cart.png" alt="Cart screen" width="240"> | <img src="docs/screenshots/payment.png" alt="Simulated payment screen" width="240"> |
+| Product Catalog | Product Details | Cart | Simulated Payment |
+| --- | --- | --- | --- |
+| <img src="docs/screenshots/catalog.png" alt="Product catalog screen" width="210"> | <img src="docs/screenshots/details.png" alt="Product details screen" width="210"> | <img src="docs/screenshots/cart.png" alt="Cart screen" width="210"> | <img src="docs/screenshots/payment.png" alt="Simulated payment screen" width="210"> |
 
 ## What The App Does
 
 - Shows a simple product catalog with images, names, descriptions, and prices.
+- Lets the user search products by name, category, or description.
 - Lets the user filter products by category.
+- Lets the user sort products by featured order, low price, or high price.
+- Opens a product details dialog when a product card is tapped.
+- Lets the user save favorite products during browsing.
 - Lets the user add products to the cart and change quantities with `+` and `-`.
 - Shows a cart total and item count.
 - Opens the cart in a dialog on phone-sized screens.
 - Shows the cart beside the catalog on wider screens.
 - Includes a demo checkout flow with `Demo Wallet` and `Demo Card`.
+- Shows a short simulated processing state during payment.
 - Clears the cart after the simulated payment is completed.
 
 ## Product Details
@@ -104,6 +109,7 @@ MobileShop/
 |   |-- bag.png
 |   |-- cart.png
 |   |-- catalog.png
+|   |-- details.png
 |   `-- payment.png
 |-- gradle/wrapper/
 |-- build.gradle.kts
@@ -131,7 +137,8 @@ The app does not use a backend, database, login system, network API, or real pay
 
 ```bash
 ./gradlew :app:assembleDebug
+./gradlew test
 ./gradlew :app:assembleRelease
 ```
 
-Both builds passed.
+Both builds and the tests passed.

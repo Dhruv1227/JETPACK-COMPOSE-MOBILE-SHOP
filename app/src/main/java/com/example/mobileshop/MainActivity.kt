@@ -3,9 +3,14 @@ package com.example.mobileshop
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -33,17 +39,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,23 +105,45 @@ fun MobileShopTheme(content: @Composable () -> Unit) {
     )
 }
 
+private const val SORT_FEATURED = "Featured"
+private const val SORT_PRICE_LOW = "Price low"
+private const val SORT_PRICE_HIGH = "Price high"
+
 @Composable
 fun ShopApp() {
     val products = remember { shopInventory() }
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedSort by rememberSaveable { mutableStateOf(SORT_FEATURED) }
     var quantities by rememberSaveable { mutableStateOf(emptyMap<Int, Int>()) }
+    var favoriteIds by remember { mutableStateOf(emptySet<Int>()) }
     var isCartOpen by rememberSaveable { mutableStateOf(false) }
     var isPaymentOpen by rememberSaveable { mutableStateOf(false) }
+    var selectedProductId by rememberSaveable { mutableStateOf<Int?>(null) }
     val categories = remember(products) { listOf("All") + products.map { it.category }.distinct() }
-    val visibleProducts = products.filter {
-        selectedCategory == "All" || it.category == selectedCategory
-    }
+    val visibleProducts = products
+        .filter { selectedCategory == "All" || it.category == selectedCategory }
+        .filter { item ->
+            val query = searchQuery.trim()
+            query.isBlank() ||
+                item.name.contains(query, ignoreCase = true) ||
+                item.category.contains(query, ignoreCase = true) ||
+                item.description.contains(query, ignoreCase = true)
+        }
+        .let { filteredProducts ->
+            when (selectedSort) {
+                SORT_PRICE_LOW -> filteredProducts.sortedBy { it.priceCents }
+                SORT_PRICE_HIGH -> filteredProducts.sortedByDescending { it.priceCents }
+                else -> filteredProducts
+            }
+        }
     val bagLines = products.mapNotNull { item ->
         val quantity = quantities[item.id] ?: 0
         if (quantity > 0) BagLine(item, quantity) else null
     }
     val totalCents = calculateBagTotalCents(bagLines)
     val itemCount = calculateBagItemCount(bagLines)
+    val selectedProduct = products.firstOrNull { it.id == selectedProductId }
 
     fun updateQuantity(item: ShopItem, change: Int) {
         val nextQuantity = ((quantities[item.id] ?: 0) + change).coerceAtLeast(0)
@@ -119,6 +151,14 @@ fun ShopApp() {
             quantities - item.id
         } else {
             quantities + (item.id to nextQuantity)
+        }
+    }
+
+    fun toggleFavorite(item: ShopItem) {
+        favoriteIds = if (item.id in favoriteIds) {
+            favoriteIds - item.id
+        } else {
+            favoriteIds + item.id
         }
     }
 
@@ -165,10 +205,17 @@ fun ShopApp() {
                         categories = categories,
                         selectedCategory = selectedCategory,
                         onCategorySelected = { selectedCategory = it },
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        selectedSort = selectedSort,
+                        onSortSelected = { selectedSort = it },
                         products = visibleProducts,
                         quantities = quantities,
+                        favoriteIds = favoriteIds,
                         onAdd = { updateQuantity(it, 1) },
                         onRemove = { updateQuantity(it, -1) },
+                        onFavoriteToggle = { toggleFavorite(it) },
+                        onProductSelected = { selectedProductId = it.id },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
@@ -190,10 +237,17 @@ fun ShopApp() {
                     categories = categories,
                     selectedCategory = selectedCategory,
                     onCategorySelected = { selectedCategory = it },
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    selectedSort = selectedSort,
+                    onSortSelected = { selectedSort = it },
                     products = visibleProducts,
                     quantities = quantities,
+                    favoriteIds = favoriteIds,
                     onAdd = { updateQuantity(it, 1) },
                     onRemove = { updateQuantity(it, -1) },
+                    onFavoriteToggle = { toggleFavorite(it) },
+                    onProductSelected = { selectedProductId = it.id },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
@@ -216,6 +270,18 @@ fun ShopApp() {
             )
         }
 
+        if (selectedProduct != null) {
+            ProductDetailsDialog(
+                item = selectedProduct,
+                quantity = quantities[selectedProduct.id] ?: 0,
+                isFavorite = selectedProduct.id in favoriteIds,
+                onAdd = { updateQuantity(selectedProduct, 1) },
+                onRemove = { updateQuantity(selectedProduct, -1) },
+                onFavoriteToggle = { toggleFavorite(selectedProduct) },
+                onDismiss = { selectedProductId = null }
+            )
+        }
+
         if (isPaymentOpen) {
             SimulatedPaymentDialog(
                 totalCents = totalCents,
@@ -231,10 +297,17 @@ private fun CatalogPane(
     categories: List<String>,
     selectedCategory: String,
     onCategorySelected: (String) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    selectedSort: String,
+    onSortSelected: (String) -> Unit,
     products: List<ShopItem>,
     quantities: Map<Int, Int>,
+    favoriteIds: Set<Int>,
     onAdd: (ShopItem) -> Unit,
     onRemove: (ShopItem) -> Unit,
+    onFavoriteToggle: (ShopItem) -> Unit,
+    onProductSelected: (ShopItem) -> Unit,
     modifier: Modifier = Modifier,
     compactBagLines: List<BagLine> = emptyList(),
     compactTotalCents: Int = 0,
@@ -243,10 +316,24 @@ private fun CatalogPane(
 ) {
     Column(modifier = modifier) {
         ShopHeader()
+        ProductSearchField(
+            query = searchQuery,
+            onQueryChange = onSearchQueryChange
+        )
         CategoryFilter(
             categories = categories,
             selectedCategory = selectedCategory,
             onCategorySelected = onCategorySelected
+        )
+        SortFilter(
+            selectedSort = selectedSort,
+            onSortSelected = onSortSelected
+        )
+        CatalogStatus(
+            productCount = products.size,
+            favoriteCount = favoriteIds.size,
+            searchQuery = searchQuery,
+            onClearSearch = { onSearchQueryChange("") }
         )
 
         if (useGrid) {
@@ -257,12 +344,20 @@ private fun CatalogPane(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                if (products.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyProductsMessage(onClearSearch = { onSearchQueryChange("") })
+                    }
+                }
                 items(products, key = { it.id }) { item ->
                     ProductCard(
                         item = item,
                         quantity = quantities[item.id] ?: 0,
+                        isFavorite = item.id in favoriteIds,
                         onAdd = { onAdd(item) },
-                        onRemove = { onRemove(item) }
+                        onRemove = { onRemove(item) },
+                        onFavoriteToggle = { onFavoriteToggle(item) },
+                        onDetails = { onProductSelected(item) }
                     )
                 }
             }
@@ -272,12 +367,20 @@ private fun CatalogPane(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                if (products.isEmpty()) {
+                    item {
+                        EmptyProductsMessage(onClearSearch = { onSearchQueryChange("") })
+                    }
+                }
                 items(products, key = { it.id }) { item ->
                     ProductCard(
                         item = item,
                         quantity = quantities[item.id] ?: 0,
+                        isFavorite = item.id in favoriteIds,
                         onAdd = { onAdd(item) },
-                        onRemove = { onRemove(item) }
+                        onRemove = { onRemove(item) },
+                        onFavoriteToggle = { onFavoriteToggle(item) },
+                        onDetails = { onProductSelected(item) }
                     )
                 }
                 item {
@@ -337,6 +440,24 @@ private fun ShopHeader() {
     }
 }
 
+@Composable
+private fun ProductSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        placeholder = { Text("Search products") },
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    )
+    Spacer(modifier = Modifier.height(10.dp))
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategoryFilter(
@@ -360,19 +481,122 @@ private fun CategoryFilter(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SortFilter(
+    selectedSort: String,
+    onSortSelected: (String) -> Unit
+) {
+    val sortOptions = listOf(SORT_FEATURED, SORT_PRICE_LOW, SORT_PRICE_HIGH)
+
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(sortOptions) { option ->
+            FilterChip(
+                selected = selectedSort == option,
+                onClick = { onSortSelected(option) },
+                label = { Text(option) },
+                shape = RoundedCornerShape(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CatalogStatus(
+    productCount: Int,
+    favoriteCount: Int,
+    searchQuery: String,
+    onClearSearch: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = "$productCount product(s) found",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
+            )
+            AnimatedVisibility(visible = favoriteCount > 0) {
+                Text(
+                    text = "$favoriteCount saved",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        AnimatedVisibility(visible = searchQuery.isNotBlank()) {
+            TextButton(onClick = onClearSearch) {
+                Text("Clear search")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyProductsMessage(onClearSearch: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Text(
+                text = "No products found",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                text = "Try another search or choose a different category.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onClearSearch) {
+                Text("Clear search")
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProductCard(
     item: ShopItem,
     quantity: Int,
     onAdd: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
+    onDetails: () -> Unit
 ) {
+    val imageBackground by animateColorAsState(
+        targetValue = if (isFavorite) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+        },
+        label = "favorite_background"
+    )
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .clickable(onClick = onDetails)
     ) {
         Row(
             modifier = Modifier
@@ -382,7 +606,7 @@ private fun ProductCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                color = imageBackground,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.size(92.dp)
             ) {
@@ -395,12 +619,24 @@ private fun ProductCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.category.uppercase(Locale.US),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = item.category.uppercase(Locale.US),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                        onClick = onFavoriteToggle,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text(if (isFavorite) "Saved" else "Save")
+                    }
+                }
                 Text(
                     text = item.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -443,39 +679,44 @@ private fun QuantityControl(
     onAdd: () -> Unit,
     onRemove: () -> Unit
 ) {
-    if (quantity == 0) {
-        Button(
-            onClick = onAdd,
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-        ) {
-            Text("Add")
-        }
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onRemove,
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(38.dp)
-            ) {
-                Text("-")
-            }
-            Text(
-                text = quantity.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+    AnimatedContent(
+        targetState = quantity,
+        label = "quantity_control"
+    ) { currentQuantity ->
+        if (currentQuantity == 0) {
             Button(
                 onClick = onAdd,
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(38.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Text("+")
+                Text("Add")
+            }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onRemove,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Text("-")
+                }
+                Text(
+                    text = currentQuantity.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = onAdd,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Text("+")
+                }
             }
         }
     }
@@ -825,14 +1066,143 @@ private fun CartDialog(
 }
 
 @Composable
+private fun ProductDetailsDialog(
+    item: ShopItem,
+    quantity: Int,
+    isFavorite: Boolean,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 640.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(18.dp)
+                    .animateContentSize()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Product Details",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    TextButton(onClick = onDismiss) {
+                        Text("Close")
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = item.imageResId),
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = item.category.uppercase(Locale.US),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Price",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                        )
+                        Text(
+                            text = formatCurrency(item.priceCents),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    QuantityControl(
+                        quantity = quantity,
+                        onAdd = onAdd,
+                        onRemove = onRemove
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                if (isFavorite) {
+                    Button(
+                        onClick = onFavoriteToggle,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Saved")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onFavoriteToggle,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save Product")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SimulatedPaymentDialog(
     totalCents: Int,
     onPay: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var paymentMethod by rememberSaveable { mutableStateOf("Demo Wallet") }
+    var isProcessing by rememberSaveable { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    LaunchedEffect(isProcessing) {
+        if (isProcessing) {
+            delay(900)
+            onPay()
+        }
+    }
+
+    Dialog(onDismissRequest = { if (!isProcessing) onDismiss() }) {
         Surface(
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -850,7 +1220,10 @@ private fun SimulatedPaymentDialog(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isProcessing
+                    ) {
                         Text("Cancel")
                     }
                 }
@@ -884,12 +1257,14 @@ private fun SimulatedPaymentDialog(
                         label = "Demo Wallet",
                         selected = paymentMethod == "Demo Wallet",
                         onClick = { paymentMethod = "Demo Wallet" },
+                        enabled = !isProcessing,
                         modifier = Modifier.weight(1f)
                     )
                     PaymentOptionButton(
                         label = "Demo Card",
                         selected = paymentMethod == "Demo Card",
                         onClick = { paymentMethod = "Demo Card" },
+                        enabled = !isProcessing,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -920,8 +1295,8 @@ private fun SimulatedPaymentDialog(
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Button(
-                    onClick = onPay,
-                    enabled = totalCents > 0,
+                    onClick = { isProcessing = true },
+                    enabled = totalCents > 0 && !isProcessing,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
@@ -929,7 +1304,17 @@ private fun SimulatedPaymentDialog(
                         disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
                     )
                 ) {
-                    Text("Pay ${formatCurrency(totalCents)}")
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Processing")
+                    } else {
+                        Text("Pay ${formatCurrency(totalCents)}")
+                    }
                 }
             }
         }
@@ -941,11 +1326,13 @@ private fun PaymentOptionButton(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     if (selected) {
         Button(
             onClick = onClick,
+            enabled = enabled,
             shape = RoundedCornerShape(8.dp),
             modifier = modifier
         ) {
@@ -954,6 +1341,7 @@ private fun PaymentOptionButton(
     } else {
         OutlinedButton(
             onClick = onClick,
+            enabled = enabled,
             shape = RoundedCornerShape(8.dp),
             modifier = modifier
         ) {
